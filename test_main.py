@@ -151,27 +151,31 @@ def test_security_injection_blocked():
 # ==========================================
 
 def test_history_workflow():
-    # 1. ล้างประวัติก่อนเริ่ม
-    del_r = client.delete("/history")
-    assert del_r.status_code == 200
-    assert del_r.json()["ok"] is True
-
-    # 2. คำนวณ 2 ค่า
-    client.post("/calculate", params={"expr": "10 + 20"})
-    client.post("/calculate", params={"expr": "5 * 4"})
-
-    # 3. ดึงประวัติมาตรวจสอบ
-    get_r = client.get("/history")
-    assert get_r.status_code == 200
-    items = get_r.json()
-    assert len(items) == 2
-    assert items[0]["expr"] == "10 + 20"
-    assert items[0]["result"] == 30
-    assert items[1]["expr"] == "5 * 4"
-    assert items[1]["result"] == 20
-
-    # 4. ล้างประวัติและตรวจว่าว่างเปล่า
+    # 1. เคลียร์ประวัติ
     client.delete("/history")
-    empty_r = client.get("/history")
-    assert empty_r.status_code == 200
-    assert len(empty_r.json()) == 0
+
+    # 2. จำลองการคำนวณตามตัวอย่างของอาจารย์
+    client.post("/calculate", params={"expr": "17 + 10"})
+    client.post("/calculate", params={"expr": "23 - 6"})
+
+    # 3. ดึงประวัติพร้อม limit=50
+    res = client.get("/history", params={"limit": 50})
+    assert res.status_code == 200
+    items = res.json()
+    assert len(items) == 2
+    assert items[0]["expr"] == "17 + 10"
+    assert items[0]["result"] == 27
+    assert items[0]["timestamp"].endswith("Z")
+    assert items[1]["expr"] == "23 - 6"
+    assert items[1]["result"] == 17
+
+    # 4. ทดสอบ limit
+    res_limit = client.get("/history", params={"limit": 1})
+    assert res_limit.status_code == 200
+    assert len(res_limit.json()) == 1
+    assert res_limit.json()[0]["expr"] == "23 - 6"
+
+    # 5. ล้างประวัติ
+    del_res = client.delete("/history")
+    assert del_res.status_code == 200
+    assert len(client.get("/history").json()) == 0

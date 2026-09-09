@@ -1,7 +1,9 @@
 import math
 from collections import deque
-from datetime import datetime
-from fastapi import FastAPI
+from datetime import datetime, timezone
+from typing import List, Dict, Any
+
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from asteval import Interpreter
 
@@ -9,7 +11,7 @@ from calculator import expand_percent
 
 HISTORY_MAX = 1000
 # In-memory history queue
-history = deque(maxlen=HISTORY_MAX)
+history: deque = deque(maxlen=HISTORY_MAX)
 
 app = FastAPI(title="Mini Calculator API")
 
@@ -36,7 +38,15 @@ def calculate(expr: str):
         return {"ok": False, "expr": "", "error": "Expression cannot be empty"}
 
     try:
-        code = expand_percent(expr.strip())
+        # แปลงเครื่องหมายทางคณิตศาสตร์ให้รองรับการกดจาก UI
+        clean_expr = (
+            expr.strip()
+            .replace("×", "*")
+            .replace("÷", "/")
+            .replace("−", "-")
+        )
+        
+        code = expand_percent(clean_expr)
         result = aeval(code)
 
         if aeval.error:
@@ -44,24 +54,34 @@ def calculate(expr: str):
             aeval.error.clear()
             return {"ok": False, "expr": expr, "result": "", "error": msg}
 
-        # บันทึกลงประวัติการคำนวณ
+        # บันทึก timestamp เป็นรูปแบบ ISO UTC ลงท้ายด้วย 'Z' ตามโจทย์
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         history.append({
-            "expr": expr,
-            "result": result,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": now_utc,
+            "expr": expr.strip(),
+            "result": result
         })
 
-        return {"ok": True, "expr": expr, "result": result, "error": ""}
+        return {"ok": True, "expr": expr.strip(), "result": result, "error": ""}
     except Exception as e:
         return {"ok": False, "expr": expr, "error": str(e)}
 
 
 @app.get("/history")
-def get_history():
-    return list(history)
+def get_history(limit: int = Query(default=50, ge=1)):
+    """
+    คืนค่าประวัติการคำนวณล่าสุดไม่เกิน limit รายการ (Default 50)
+    """
+    items = list(history)
+    if limit > 0:
+        return items[-limit:]
+    return []
 
 
 @app.delete("/history")
 def clear_history():
+    """
+    ล้างประวัติการคำนวณทั้งหมด
+    """
     history.clear()
     return {"ok": True, "message": "History cleared"}
