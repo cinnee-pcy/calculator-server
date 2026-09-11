@@ -2,9 +2,9 @@ name: Test Calculator Server
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, lab3-oop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, lab3-oop ]
 
 jobs:
   test:
